@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -85,8 +86,26 @@ namespace M220N.Repositories
         /// <returns>The <see cref="Movie" /></returns>
         public async Task<Movie> GetMovieAsync(string movieId, CancellationToken cancellationToken = default)
         {
+
+            ObjectId objId;
+            if (!MongoDB.Bson.ObjectId.TryParse(movieId, out objId))
+            {
+                return null;
+            }
+
             try
             {
+
+                // if (MongoDB.Bson.ObjectId.Parse(movieId).Pid == 0)
+                // {
+                //     return null;
+                // }
+
+                // if (objId.Pid == 0)
+                // {
+                //     return null;
+                // }
+
                 return await _moviesCollection
                     .Aggregate()
                     .Match(Builders<Movie>.Filter.Eq(x => x.Id, movieId))
@@ -100,6 +119,11 @@ namespace M220N.Repositories
                         (Movie mv) => mv.Comments
                     )
                     .FirstOrDefaultAsync(cancellationToken);
+            }
+            catch (FormatException sfex)
+            {
+                Debug.Fail(sfex.Message);
+                return null;
             }
 
             catch (Exception ex)

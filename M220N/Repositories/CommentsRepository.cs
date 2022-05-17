@@ -4,7 +4,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using M220N.Models;
 using M220N.Models.Projections;
-using M220N.Models.Responses;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Conventions;
 using MongoDB.Driver;
@@ -101,10 +100,10 @@ namespace M220N.Repositories
             return await _commentsCollection
             .UpdateOneAsync(
                 Builders<Comment>.Filter
-                .Where(it =>
-                    it.Id.Equals(commentId) &&
-                    //it.MovieId.Equals(movieId)
-                    it.Email.Equals(user.Email)
+                .Where(fi =>
+                    fi.Id.Equals(commentId) &&
+                    fi.MovieId.Equals(movieId) &&
+                    fi.Email.Equals(user.Email)
                 ),
                 Builders<Comment>.Update
                 .Set(c => c.Text, comment)
@@ -113,15 +112,15 @@ namespace M220N.Repositories
                 cancellationToken
             );
 
-                /*
-                // Course Solution
-                return await _commentsCollection.UpdateOneAsync(
-                    Builders<Comment>.Filter.Where(c => c.Id == commentId && c.Email == user.Email),
-                    Builders<Comment>.Update.Set(c => c.Text, comment).Set(c => c.Date, DateTime.UtcNow),
-                    new UpdateOptions {IsUpsert = false},
-                    cancellationToken
-                );
-                */
+            /*
+            // Course Solution
+            return await _commentsCollection.UpdateOneAsync(
+                Builders<Comment>.Filter.Where(c => c.Id == commentId && c.Email == user.Email),
+                Builders<Comment>.Update.Set(c => c.Text, comment).Set(c => c.Date, DateTime.UtcNow),
+                new UpdateOptions {IsUpsert = false},
+                cancellationToken
+            );
+            */
         }
 
         /// <summary>
@@ -139,10 +138,15 @@ namespace M220N.Repositories
             // Implement DeleteOne() to delete an
             // existing comment. Remember that only the original
             // comment owner can delete the comment!
-            _commentsCollection.DeleteOne(
-                Builders<Comment>.Filter.Where(
-                    c => c.MovieId == movieId
-                         && c.Id == commentId));
+            _commentsCollection
+            .DeleteOne(
+                Builders<Comment>.Filter
+                .Where(fi =>
+                    fi.MovieId == movieId &&
+                    fi.Id == commentId &&
+                    fi.Email.Equals(user.Email)
+                )
+            );
 
             return await _moviesRepository.GetMovieAsync(movieId.ToString(), cancellationToken);
         }
@@ -170,6 +174,32 @@ namespace M220N.Repositories
                 // //   .Aggregate()
                 // //   .Group(...)
                 // //   .Sort(...).Limt(...).Project(...).ToListAsync()
+
+                var sortByDescending = Builders<ReportProjection>.Sort.Descending(it => it.Count);
+                // var group = Aggr
+                var projection = Builders<BsonDocument>.Projection
+                    .Include("count")
+                    .Include("_id")
+                ;
+
+                result = await _commentsCollection
+                  .WithReadConcern(ReadConcern.Majority)
+                  .Aggregate()
+                  // .Group( c => c.Email, g => new { Id = g.Key, Count = g.Count })
+                  .Group(new BsonDocument
+                    {
+                        {"_id", "$name" },
+                        {
+                            "count", new BsonDocument("$count", new BsonDocument() )
+                        }
+                    }
+                  )
+                  .Sort(new BsonDocument("count", -1))
+                  .Limit(20)
+                  //.Project( p => new ReportProjection{ Id = p.Id, Count = p.Count })
+                  .Project<ReportProjection>(projection)
+                  .ToListAsync()
+                ;
 
                 return new TopCommentsProjection(result);
             }

@@ -18,8 +18,8 @@ namespace Migrator
         static IMongoCollection<Movie> _moviesCollection;
 
         // TODO: Update this connection string as needed.
-        static string mongoConnectionString = "";
-        
+        static string mongoConnectionString = "mongodb+srv://m220student:m220password@mflix.teuh2.mongodb.net/test?retryWrites=true&w=majority";
+
         static async Task Main(string[] args)
         {
             Setup();
@@ -37,9 +37,38 @@ namespace Migrator
                 //
                 // // bulkWriteDatesResult = await _moviesCollection.BulkWriteAsync(...
 
+                /*
+                // Opcion 1
+                bulkWriteDatesResult = await _moviesCollection.BulkWriteAsync(
+                    datePipelineResults.Select(
+                        upd => new ReplaceOneModel<Movie>(
+                            new FilterDefinitionBuilder<Movie>().Where(
+                                m => m.Id.Equals(upd.Id)
+                            ),
+                            upd
+                        )
+                    )
+                );
+                */
+
+                // Opcion 2
+                var _request = datePipelineResults.Select(
+                    selector: sel => new ReplaceOneModel<Movie>(
+                        filter: new FilterDefinitionBuilder<Movie>().Where(
+                            m => m.Id.Equals(sel.Id)
+                        ),
+                        replacement: sel
+                    )
+                );
+
+                bulkWriteDatesResult = await _moviesCollection.BulkWriteAsync(
+                  _request
+                );
+
                 Console.WriteLine($"{bulkWriteDatesResult.ProcessedRequests.Count} records updated.");
             }
 
+            //--------------------
             var ratingPipelineResults = TransformRatingPipeline();
             Console.WriteLine($"I found {ratingPipelineResults.Count} docs where the imdb.rating field is not a number type.");
 
@@ -51,6 +80,19 @@ namespace Migrator
                 // (https://mongodb.github.io/mongo-csharp-driver/2.12/apidocs/html/T_MongoDB_Driver_ReplaceOneModel_1.htm).
                 //
                 // // bulkWriteRatingsResult = await _moviesCollection.BulkWriteAsync(...
+
+                var _request = ratingPipelineResults.Select(
+                    selector: sel => new ReplaceOneModel<Movie>(
+                        filter: new FilterDefinitionBuilder<Movie>().Where(
+                            m => m.Id.Equals(sel.Id)
+                        ),
+                        replacement: sel
+                    )
+                );
+
+                bulkWriteRatingsResult = await _moviesCollection.BulkWriteAsync(
+                    _request
+                );
 
                 Console.WriteLine($"{bulkWriteRatingsResult.ProcessedRequests.Count} records updated.");
             }
@@ -67,11 +109,11 @@ namespace Migrator
 
         static void Setup()
         {
-            var camelCaseConvention = new ConventionPack {new CamelCaseElementNameConvention()};
+            var camelCaseConvention = new ConventionPack { new CamelCaseElementNameConvention() };
             ConventionRegistry.Register("CamelCase", camelCaseConvention, type => true);
 
             var mongoUri = mongoConnectionString;
-            var mflixClient = new MongoClient(mongoUri);    
+            var mflixClient = new MongoClient(mongoUri);
             var moviesDatabase = mflixClient.GetDatabase("sample_mflix");
             _moviesCollection = moviesDatabase.GetCollection<Movie>("movies");
         }
@@ -126,7 +168,7 @@ namespace Migrator
         ///
         /// </summary>
         /// <returns>A List of Movie objects with the lastupdated values converted to dates.</returns>
-        static List<Movie> TransformDatePipeline()
+        static ICollection<Movie> TransformDatePipeline()
         {
             var pipeline = new[]
             {
@@ -185,7 +227,7 @@ namespace Migrator
             else
             {
                 Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine($"[ ] Uh oh. One or both of your pipelines missed {badDocs.Count} documents...");
+                Console.WriteLine($"[x] Uh oh. One or both of your pipelines missed {badDocs.Count} documents...");
             }
         }
     }
